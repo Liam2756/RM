@@ -24,22 +24,36 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
-#include "bmi088.h"
-#include "imu_angle.h"
-#include <stdio.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "bmi088.h"
+#include "imu_angle.h"
+#include "bsp_uart.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
+typedef union
+{
+    uint8_t bytes[1 + 3 * sizeof(float)];
+    struct
+    {
+        uint8_t header;
+        float   roll;
+        float   pitch;
+        float   yaw;
+    } frame;
+} IMU_UartFrame_t;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+#define IMU_UART_FRAME_HEADER     (0x5A)
+#define IMU_UART_FRAME_SIZE       ((uint16_t)(1 + 3 * sizeof(float)))
 
 /* USER CODE END PD */
 
@@ -53,7 +67,7 @@
 /* USER CODE BEGIN PV */
 IMU_Angle_t imu_angle;
 float imu_gyro[3];
-char imu_uart_frame[96];
+IMU_UartFrame_t imu_frame;
 
 /* USER CODE END PV */
 
@@ -107,10 +121,10 @@ int main(void)
   MX_SPI1_Init();
   MX_TIM10_Init();
   MX_TIM8_Init();
+  /* USER CODE BEGIN 2 */
+  BSP_UART_StartReceive();
   BMI088_Init();
   IMU_Angle_Init(&imu_angle);
-  /* USER CODE BEGIN 2 */
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -119,11 +133,13 @@ int main(void)
   {
     BMI088_ReadGyro(imu_gyro);
     IMU_Angle_Update(&imu_angle, imu_gyro, 0.01f);
-    int imu_uart_length = snprintf(imu_uart_frame, sizeof(imu_uart_frame),
-                                   "roll:%.3f,pitch:%.3f,yaw:%.3f\n",
-                                   imu_angle.roll, imu_angle.pitch, imu_angle.yaw);
-    HAL_UART_Transmit(&huart6, (uint8_t *)imu_uart_frame,
-                      (uint16_t)imu_uart_length, HAL_MAX_DELAY);
+
+    imu_frame.frame.header = IMU_UART_FRAME_HEADER;
+    imu_frame.frame.roll = imu_angle.roll;
+    imu_frame.frame.pitch = imu_angle.pitch;
+    imu_frame.frame.yaw = imu_angle.yaw;
+    BSP_UART_TxData(&huart6, imu_frame.bytes, IMU_UART_FRAME_SIZE);
+
     HAL_Delay(10U);
     /* USER CODE END WHILE */
 
