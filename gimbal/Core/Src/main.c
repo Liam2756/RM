@@ -24,6 +24,9 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
+#include "bmi088.h"
+#include "imu_angle.h"
+#include <stdio.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -48,9 +51,9 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-uint8_t uart6_rx_frame[32];
-uint8_t uart6_rx_len;
-const uint8_t uart6_test_frame[] = "UART6_TEST\n";
+IMU_Angle_t imu_angle;
+float imu_gyro[3];
+char imu_uart_frame[96];
 
 /* USER CODE END PV */
 
@@ -104,6 +107,8 @@ int main(void)
   MX_SPI1_Init();
   MX_TIM10_Init();
   MX_TIM8_Init();
+  BMI088_Init();
+  IMU_Angle_Init(&imu_angle);
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -112,15 +117,14 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    HAL_UART_Transmit(&huart6, (uint8_t *)uart6_test_frame,
-                      sizeof(uart6_test_frame) - 1, HAL_MAX_DELAY);
-
-    uart6_rx_len = 0;
-    do
-    {
-      HAL_UART_Receive(&huart6, &uart6_rx_frame[uart6_rx_len], 1,
-                       HAL_MAX_DELAY);
-    } while (uart6_rx_frame[uart6_rx_len++] != '\n');
+    BMI088_ReadGyro(imu_gyro);
+    IMU_Angle_Update(&imu_angle, imu_gyro, 0.01f);
+    int imu_uart_length = snprintf(imu_uart_frame, sizeof(imu_uart_frame),
+                                   "roll:%.3f,pitch:%.3f,yaw:%.3f\n",
+                                   imu_angle.roll, imu_angle.pitch, imu_angle.yaw);
+    HAL_UART_Transmit(&huart6, (uint8_t *)imu_uart_frame,
+                      (uint16_t)imu_uart_length, HAL_MAX_DELAY);
+    HAL_Delay(10U);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
