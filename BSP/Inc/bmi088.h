@@ -1,12 +1,6 @@
 #ifndef BMI088_H
 #define BMI088_H
 
-<<<<<<< HEAD
-#include "main.h"
-
-void BMI088_Init(void);
-void BMI088_ReadGyro(float gyro[3]);
-=======
 #include <stdbool.h>
 
 #include "main.h"
@@ -19,6 +13,5 @@ void BMI088_ReadGyro(float gyro[3]);
 
 void BMI088_Init(void);
 bool BMI088_Read(float gyro[3], float accel[3]);
->>>>>>> main
 
 #endif
