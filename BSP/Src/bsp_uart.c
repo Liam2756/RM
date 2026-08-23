@@ -27,38 +27,6 @@ uint8_t g_usart3_rx_buf[DT7_DATA_LENGTH]; /**< UART3 接收缓冲：DT7 遥控�
 uint8_t g_usart6_rx_buf[RSI_DATA_LENGTH]; /**< UART6 接收缓冲：裁判系统 */
 
 /* ========================================================================== */
-/*                      __weak 回调默认空实现                                   */
-/* ========================================================================== */
-
-/**
- * @brief  以下三个函数为弱符号，默认为空实现。
- *         上层协议解析模块在各自的 .c 文件中覆盖对应函数即可接入数据。
- *
- *  示例（在 vtm_driver.c 中）：
- *    void BSP_UART_VTM_DataReadyCallback(uint8_t *buf, uint16_t size)
- *    {
- *        VTM_ParseFrame(buf);  // 调用图传模块协议解析
- *    }
- */
-__weak void BSP_UART_VTM_DataReadyCallback(uint8_t *buf, uint16_t size)
-{
-    (void)buf;
-    (void)size;
-}
-
-__weak void BSP_UART_DT7_DataReadyCallback(uint8_t *buf, uint16_t size)
-{
-    (void)buf;
-    (void)size;
-}
-
-__weak void BSP_UART_RSI_DataReadyCallback(uint8_t *buf, uint16_t size)
-{
-    (void)buf;
-    (void)size;
-}
-
-/* ========================================================================== */
 /*                              公开函数实现                                    */
 /* ========================================================================== */
 
@@ -94,17 +62,17 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
 {
     if (huart == &huart1)
     {
-        BSP_UART_VTM_DataReadyCallback(g_usart1_rx_buf, size);
+        
         HAL_UARTEx_ReceiveToIdle_DMA(&huart1, g_usart1_rx_buf, VTM_DATA_LENGTH);
     }
     else if (huart == &huart3)
     {
-        BSP_UART_DT7_DataReadyCallback(g_usart3_rx_buf, size);
+        
         HAL_UARTEx_ReceiveToIdle_DMA(&huart3, g_usart3_rx_buf, DT7_DATA_LENGTH);
     }
     else if (huart == &huart6)
     {
-        BSP_UART_RSI_DataReadyCallback(g_usart6_rx_buf, size);
+
         HAL_UARTEx_ReceiveToIdle_DMA(&huart6, g_usart6_rx_buf, RSI_DATA_LENGTH);
     }
 }
