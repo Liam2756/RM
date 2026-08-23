@@ -1,78 +1,47 @@
-/**
- ******************************************************************************
- * @file    bsp_uart.c
- * @brief   UART 底层驱动实现（BSP 层）
- * @note    职责边界：
- *            - 维护各 UART 端口的 DMA 接收缓冲区
- *            - 在数据就绪时通过 __weak 回调通知上层，不直接调用上层函数
- *          解耦说明：
- *            原代码在 HAL 中断回调中直接调用 VTM_to_UART / DT7_to_UART 等
- *            上层函数，造成 BSP 层对上层产生依赖（层级倒置）。
- *            重构后改为 __weak 回调：上层协议模块覆盖对应 weak 函数即可，
- *            BSP 层对上层完全透明。
- * @version 1.0
- * @date    2026-4-4
- * @author  MOS
- ******************************************************************************
- */
-
 #include "bsp_uart.h"
 
-/* ========================================================================== */
-/*                            原始接收缓冲区                                    */
-/* ========================================================================== */
+static BSP_UART_PortConfig_t g_uart_ports[BSP_UART_MAX_PORTS];
+static uint8_t g_uart_port_count = 0U;
 
-uint8_t g_usart1_rx_buf[VTM_DATA_LENGTH]; /**< UART1 接收缓冲：视觉模块 */
-uint8_t g_usart3_rx_buf[DT7_DATA_LENGTH]; /**< UART3 接收缓冲：DT7 遥控器 */
-uint8_t g_usart6_rx_buf[RSI_DATA_LENGTH]; /**< UART6 接收缓冲：裁判系统 */
+static BSP_UART_PortConfig_t *BSP_UART_FindPort(UART_HandleTypeDef *huart)
+{
+    for (uint8_t i = 0U; i < g_uart_port_count; i++)
+    {
+        if (g_uart_ports[i].huart == huart)
+            return &g_uart_ports[i];
+    }
+    return NULL;
+}
 
-/* ========================================================================== */
-/*                              公开函数实现                                    */
-/* ========================================================================== */
+void BSP_UART_Register(const BSP_UART_PortConfig_t *port)
+{
+    if ((port == NULL) || (g_uart_port_count >= BSP_UART_MAX_PORTS))
+        return;
 
-/**
- * @brief  通过 DMA 方式发送 UART 数据
- */
+    g_uart_ports[g_uart_port_count] = *port;
+    g_uart_port_count++;
+}
+
+void BSP_UART_StartReceive(UART_HandleTypeDef *huart)
+{
+    BSP_UART_PortConfig_t *port = BSP_UART_FindPort(huart);
+    if (port != NULL)
+        HAL_UARTEx_ReceiveToIdle_DMA(port->huart, port->rx_buf, port->rx_size);
+}
+
+void BSP_UART_StartReceiveAll(void)
+{
+    for (uint8_t i = 0U; i < g_uart_port_count; i++)
+        BSP_UART_StartReceive(g_uart_ports[i].huart);
+}
+
 void BSP_UART_TxData(UART_HandleTypeDef *huart, uint8_t *data, uint16_t size)
 {
     HAL_UART_Transmit_DMA(huart, data, size);
 }
 
-/**
- * @brief  启动所有 UART 端口的 DMA 空闲帧接收
- */
-void BSP_UART_StartReceive(void)
-{
-    HAL_UARTEx_ReceiveToIdle_DMA(&huart1, g_usart1_rx_buf, VTM_DATA_LENGTH);
-    HAL_UARTEx_ReceiveToIdle_DMA(&huart3, g_usart3_rx_buf, DT7_DATA_LENGTH);
-    HAL_UARTEx_ReceiveToIdle_DMA(&huart6, g_usart6_rx_buf, RSI_DATA_LENGTH);
-}
-
-/* ========================================================================== */
-/*                              HAL 回调实现                                    */
-/* ========================================================================== */
-
-/**
- * @brief  UART DMA 空闲帧接收完成回调（HAL 弱函数覆盖）
- * @note   接收完成后：
- *           1. 调用对应的上层 weak 回调（通知数据就绪）
- *           2. 立即重启本端口 DMA 接收，保证连续接收
- */
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
 {
-    if (huart == &huart1)
-    {
-        
-        HAL_UARTEx_ReceiveToIdle_DMA(&huart1, g_usart1_rx_buf, VTM_DATA_LENGTH);
-    }
-    else if (huart == &huart3)
-    {
-        
-        HAL_UARTEx_ReceiveToIdle_DMA(&huart3, g_usart3_rx_buf, DT7_DATA_LENGTH);
-    }
-    else if (huart == &huart6)
-    {
-
-        HAL_UARTEx_ReceiveToIdle_DMA(&huart6, g_usart6_rx_buf, RSI_DATA_LENGTH);
-    }
+    (void)size;
+    BSP_UART_StartReceive(huart);
 }

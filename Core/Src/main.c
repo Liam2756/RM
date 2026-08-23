@@ -30,6 +30,7 @@
 #include "bmi088.h"
 #include "imu_attitude.h"
 #include "imu_config.h"
+#include "uart_ports.h"
 #include <math.h>
 #include <string.h>
 /* USER CODE END Includes */
@@ -160,6 +161,7 @@ int main(void)
   MX_TIM8_Init();
   /* USER CODE BEGIN 2 */
   BMI088_Init();
+  UART_Ports_Init();
   IMU_Calibrate();
   HAL_TIM_Base_Start_IT(&htim1);
   /* USER CODE END 2 */
