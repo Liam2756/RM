@@ -48,6 +48,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Algorithm/Src/imu_angle.c
     ${CMAKE_CURRENT_SOURCE_DIR}/BSP/Src/bmi088.c
     ${CMAKE_CURRENT_SOURCE_DIR}/BSP/Src/bsp_uart.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/BSP/Src/bsp_debug.c
 )
 
 # Add include paths

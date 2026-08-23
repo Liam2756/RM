@@ -30,22 +30,11 @@
 #include "bmi088.h"
 #include "imu_angle.h"
 #include "bsp_uart.h"
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
-typedef union
-{
-    uint8_t bytes[1 + 3 * sizeof(float)];
-    struct
-    {
-        uint8_t header;
-        float   roll;
-        float   pitch;
-        float   yaw;
-    } frame;
-} IMU_UartFrame_t;
 
 /* USER CODE END PTD */
 
@@ -53,7 +42,7 @@ typedef union
 /* USER CODE BEGIN PD */
 
 #define IMU_UART_FRAME_HEADER     (0x5A)
-#define IMU_UART_FRAME_SIZE       ((uint16_t)(1 + 3 * sizeof(float)))
+#define IMU_UART_FRAME_SIZE       (1 + 3 * sizeof(float))
 
 /* USER CODE END PD */
 
@@ -67,7 +56,7 @@ typedef union
 /* USER CODE BEGIN PV */
 IMU_Angle_t imu_angle;
 float imu_gyro[3];
-IMU_UartFrame_t imu_frame;
+uint8_t imu_frame[IMU_UART_FRAME_SIZE];
 
 /* USER CODE END PV */
 
@@ -134,11 +123,11 @@ int main(void)
     BMI088_ReadGyro(imu_gyro);
     IMU_Angle_Update(&imu_angle, imu_gyro, 0.01f);
 
-    imu_frame.frame.header = IMU_UART_FRAME_HEADER;
-    imu_frame.frame.roll = imu_angle.roll;
-    imu_frame.frame.pitch = imu_angle.pitch;
-    imu_frame.frame.yaw = imu_angle.yaw;
-    BSP_UART_TxData(&huart6, imu_frame.bytes, IMU_UART_FRAME_SIZE);
+    imu_frame[0] = IMU_UART_FRAME_HEADER;
+    memcpy(&imu_frame[1], &imu_angle.roll,  sizeof(float));
+    memcpy(&imu_frame[5], &imu_angle.pitch, sizeof(float));
+    memcpy(&imu_frame[9], &imu_angle.yaw,   sizeof(float));
+    BSP_UART_TxData(&huart6, imu_frame, IMU_UART_FRAME_SIZE);
 
     HAL_Delay(10U);
     /* USER CODE END WHILE */
