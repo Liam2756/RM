@@ -56,27 +56,44 @@ void IMU_Attitude_Init(IMU_Attitude_t *attitude)
         }
     }
 
-    const float accel_horizontal = sqrtf(accel_avg[1] * accel_avg[1] + accel_avg[2] * accel_avg[2]);
+    const float accel_norm = sqrtf(accel_avg[0] * accel_avg[0] + accel_avg[1] * accel_avg[1] + accel_avg[2] * accel_avg[2]);
 
-    attitude->roll = atan2f(accel_avg[1], accel_avg[2]);
-    attitude->pitch = atan2f(-accel_avg[0], accel_horizontal);
-    attitude->yaw = 0.0f;
+    if (accel_norm < 0.1f)
+    {
+        attitude->q0 = 1.0f;
+        attitude->q1 = 0.0f;
+        attitude->q2 = 0.0f;
+        attitude->q3 = 0.0f;
+    }
+    else
+    {
+        const float ax = accel_avg[0] / accel_norm;
+        const float ay = accel_avg[1] / accel_norm;
+        const float az = accel_avg[2] / accel_norm;
+        const float horizontal = sqrtf(ay * ay + az * az);
 
-    const float half_roll = 0.5f * attitude->roll;
-    const float half_pitch = 0.5f * attitude->pitch;
-    const float half_yaw = 0.0f;
+        if (horizontal < 1e-6f)
+        {
+            const float q0 = sqrtf(0.5f);
+            attitude->q0 = q0;
+            attitude->q1 = 0.0f;
+            attitude->q2 = copysignf(q0, -ax);
+            attitude->q3 = 0.0f;
+        }
+        else
+        {
+            const float half_roll_cos = sqrtf((horizontal + az) / (2.0f * horizontal));
+            const float half_roll_sine = copysignf(sqrtf((horizontal - az) / (2.0f * horizontal)), ay);
+            const float half_pitch_cos = sqrtf(0.5f * (1.0f + horizontal));
+            const float half_pitch_sine = copysignf(sqrtf(0.5f * (1.0f - horizontal)), -ax);
 
-    const float cr = cosf(half_roll);
-    const float sr = sinf(half_roll);
-    const float cp = cosf(half_pitch);
-    const float sp = sinf(half_pitch);
-    const float cy = cosf(half_yaw);
-    const float sy = sinf(half_yaw);
+            attitude->q0 = half_roll_cos * half_pitch_cos;
+            attitude->q1 = half_roll_sine * half_pitch_cos;
+            attitude->q2 = half_roll_cos * half_pitch_sine;
+            attitude->q3 = 0.0f;
+        }
+    }
 
-    attitude->q0 = cr * cp * cy + sr * sp * sy;
-    attitude->q1 = sr * cp * cy - cr * sp * sy;
-    attitude->q2 = cr * sp * cy + sr * cp * sy;
-    attitude->q3 = cr * cp * sy - sr * sp * cy;
     attitude->integral_error[0] = 0.0f;
     attitude->integral_error[1] = 0.0f;
     attitude->integral_error[2] = 0.0f;
