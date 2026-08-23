@@ -28,8 +28,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "bmi088.h"
-#include "imu_angle.h"
-#include "bsp_uart.h"
+#include "imu_attitude.h"
+#include "imu_config.h"
+#include <math.h>
 #include <string.h>
 /* USER CODE END Includes */
 
@@ -42,8 +43,7 @@
 /* USER CODE BEGIN PD */
 
 #define IMU_UART_FRAME_HEADER     (0x5A)
-#define IMU_UART_FRAME_SIZE       (1 + 3 * sizeof(float))
-
+#define IMU_UART_FRAME_SIZE       ((uint16_t)(1 + 3 * sizeof(float)))
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -54,9 +54,12 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-IMU_Angle_t imu_angle;
+IMU_Attitude_t imu_attitude;
 float imu_gyro[3];
+float imu_accel[3];
+float imu_gyro_bias[3];
 uint8_t imu_frame[IMU_UART_FRAME_SIZE];
+volatile uint8_t imu_update_pending;
 
 /* USER CODE END PV */
 
@@ -68,6 +71,51 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+static void IMU_Calibrate(void)
+{
+  double gyro_sum[3] = {0.0, 0.0, 0.0};
+  double accel_sum[3] = {0.0, 0.0, 0.0};
+  uint32_t valid_samples = 0U;
+
+  for (uint32_t sample = 0U; sample < IMU_CALIBRATION_SAMPLE_COUNT; sample++)
+  {
+    if (BMI088_Read(imu_gyro, imu_accel))
+    {
+      const float accel_norm = sqrtf(imu_accel[0] * imu_accel[0] +
+                                     imu_accel[1] * imu_accel[1] +
+                                     imu_accel[2] * imu_accel[2]);
+      if (fabsf(accel_norm - IMU_ATTITUDE_GRAVITY_MSS) <= IMU_CALIBRATION_ACCEL_TOLERANCE_MSS)
+      {
+        for (uint32_t axis = 0U; axis < 3U; axis++)
+        {
+          gyro_sum[axis] += imu_gyro[axis];
+          accel_sum[axis] += imu_accel[axis];
+        }
+        valid_samples++;
+      }
+    }
+    HAL_Delay(1U);
+  }
+
+  if (valid_samples > 0U)
+  {
+    for (uint32_t axis = 0U; axis < 3U; axis++)
+    {
+      imu_gyro_bias[axis] = (float)(gyro_sum[axis] / valid_samples);
+      imu_accel[axis] = (float)(accel_sum[axis] / valid_samples);
+    }
+  }
+  IMU_Attitude_Init(&imu_attitude, imu_accel);
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim == &htim1)
+  {
+    imu_update_pending = 1U;
+  }
+}
 
 /* USER CODE END 0 */
 
@@ -111,25 +159,35 @@ int main(void)
   MX_TIM10_Init();
   MX_TIM8_Init();
   /* USER CODE BEGIN 2 */
-  BSP_UART_StartReceive();
   BMI088_Init();
-  IMU_Angle_Init(&imu_angle);
+  IMU_Calibrate();
+  HAL_TIM_Base_Start_IT(&htim1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    BMI088_ReadGyro(imu_gyro);
-    IMU_Angle_Update(&imu_angle, imu_gyro, 0.01f);
+    if (imu_update_pending)
+    {
+      imu_update_pending = 0U;
+      if (BMI088_Read(imu_gyro, imu_accel))
+      {
+        for (uint32_t axis = 0U; axis < 3U; axis++)
+          imu_gyro[axis] -= imu_gyro_bias[axis];
 
-    imu_frame[0] = IMU_UART_FRAME_HEADER;
-    memcpy(&imu_frame[1], &imu_angle.roll,  sizeof(float));
-    memcpy(&imu_frame[5], &imu_angle.pitch, sizeof(float));
-    memcpy(&imu_frame[9], &imu_angle.yaw,   sizeof(float));
-    BSP_UART_TxData(&huart6, imu_frame, IMU_UART_FRAME_SIZE);
+        IMU_Attitude_Update(&imu_attitude, imu_gyro, imu_accel, IMU_UPDATE_DT_S);
 
-    HAL_Delay(10U);
+        if (HAL_UART_GetState(&huart6) == HAL_UART_STATE_READY)
+        {
+          imu_frame[0] = IMU_UART_FRAME_HEADER;
+          memcpy(&imu_frame[1], &imu_attitude.roll, sizeof(float));
+          memcpy(&imu_frame[1 + sizeof(float)], &imu_attitude.pitch, sizeof(float));
+          memcpy(&imu_frame[1 + 2 * sizeof(float)], &imu_attitude.yaw, sizeof(float));
+          HAL_UART_Transmit_DMA(&huart6, imu_frame, IMU_UART_FRAME_SIZE);
+        }
+      }
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
