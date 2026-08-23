@@ -45,11 +45,18 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
+    ${CMAKE_CURRENT_SOURCE_DIR}/Algorithm/Src/imu_attitude.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/BSP/Src/bmi088.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/BSP/Src/bsp_uart.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/Src/uart_ports.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+    ${CMAKE_CURRENT_SOURCE_DIR}/Algorithm/Inc
+    ${CMAKE_CURRENT_SOURCE_DIR}/BSP/Inc
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/Inc
 )
 
 # Add project symbols (macros)

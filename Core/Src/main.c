@@ -28,9 +28,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "bmi088.h"
+#include "bsp_uart.h"
 #include "imu_attitude.h"
-#include "imu_config.h"
-#include <math.h>
+#include "uart_ports.h"
 #include <string.h>
 /* USER CODE END Includes */
 
@@ -43,7 +43,7 @@
 /* USER CODE BEGIN PD */
 
 #define IMU_UART_FRAME_HEADER     (0x5A)
-#define IMU_UART_FRAME_SIZE       ((uint16_t)(1 + 3 * sizeof(float)))
+#define IMU_UART_FRAME_SIZE       ((uint16_t)(1 + 4 * sizeof(float)))
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -55,11 +55,8 @@
 
 /* USER CODE BEGIN PV */
 IMU_Attitude_t imu_attitude;
-float imu_gyro[3];
-float imu_accel[3];
-float imu_gyro_bias[3];
 uint8_t imu_frame[IMU_UART_FRAME_SIZE];
-volatile uint8_t imu_update_pending;
+float imu_update_dt_s;
 
 /* USER CODE END PV */
 
@@ -72,49 +69,13 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-static void IMU_Calibrate(void)
+static void IMU_BuildFrame(uint8_t *frame, const IMU_Attitude_t *attitude)
 {
-  double gyro_sum[3] = {0.0, 0.0, 0.0};
-  double accel_sum[3] = {0.0, 0.0, 0.0};
-  uint32_t valid_samples = 0U;
-
-  for (uint32_t sample = 0U; sample < IMU_CALIBRATION_SAMPLE_COUNT; sample++)
-  {
-    if (BMI088_Read(imu_gyro, imu_accel))
-    {
-      const float accel_norm = sqrtf(imu_accel[0] * imu_accel[0] +
-                                     imu_accel[1] * imu_accel[1] +
-                                     imu_accel[2] * imu_accel[2]);
-      if (fabsf(accel_norm - IMU_ATTITUDE_GRAVITY_MSS) <= IMU_CALIBRATION_ACCEL_TOLERANCE_MSS)
-      {
-        for (uint32_t axis = 0U; axis < 3U; axis++)
-        {
-          gyro_sum[axis] += imu_gyro[axis];
-          accel_sum[axis] += imu_accel[axis];
-        }
-        valid_samples++;
-      }
-    }
-    HAL_Delay(1U);
-  }
-
-  if (valid_samples > 0U)
-  {
-    for (uint32_t axis = 0U; axis < 3U; axis++)
-    {
-      imu_gyro_bias[axis] = (float)(gyro_sum[axis] / valid_samples);
-      imu_accel[axis] = (float)(accel_sum[axis] / valid_samples);
-    }
-  }
-  IMU_Attitude_Init(&imu_attitude, imu_accel);
-}
-
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-  if (htim == &htim1)
-  {
-    imu_update_pending = 1U;
-  }
+  frame[0] = IMU_UART_FRAME_HEADER;
+  memcpy(&frame[1], &attitude->q0, sizeof(float));
+  memcpy(&frame[1 + sizeof(float)], &attitude->q1, sizeof(float));
+  memcpy(&frame[1 + 2 * sizeof(float)], &attitude->q2, sizeof(float));
+  memcpy(&frame[1 + 3 * sizeof(float)], &attitude->q3, sizeof(float));
 }
 
 /* USER CODE END 0 */
@@ -160,7 +121,9 @@ int main(void)
   MX_TIM8_Init();
   /* USER CODE BEGIN 2 */
   BMI088_Init();
-  IMU_Calibrate();
+  UART_Ports_Init();
+  IMU_Attitude_Init(&imu_attitude);
+  imu_update_dt_s = (float)((htim1.Init.Prescaler + 1U) * (htim1.Init.Period + 1U)) / (float)SystemCoreClock;
   HAL_TIM_Base_Start_IT(&htim1);
   /* USER CODE END 2 */
 
@@ -168,26 +131,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    if (imu_update_pending)
-    {
-      imu_update_pending = 0U;
-      if (BMI088_Read(imu_gyro, imu_accel))
-      {
-        for (uint32_t axis = 0U; axis < 3U; axis++)
-          imu_gyro[axis] -= imu_gyro_bias[axis];
-
-        IMU_Attitude_Update(&imu_attitude, imu_gyro, imu_accel, IMU_UPDATE_DT_S);
-
-        if (HAL_UART_GetState(&huart6) == HAL_UART_STATE_READY)
-        {
-          imu_frame[0] = IMU_UART_FRAME_HEADER;
-          memcpy(&imu_frame[1], &imu_attitude.roll, sizeof(float));
-          memcpy(&imu_frame[1 + sizeof(float)], &imu_attitude.pitch, sizeof(float));
-          memcpy(&imu_frame[1 + 2 * sizeof(float)], &imu_attitude.yaw, sizeof(float));
-          HAL_UART_Transmit_DMA(&huart6, imu_frame, IMU_UART_FRAME_SIZE);
-        }
-      }
-    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -241,7 +184,20 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim != &htim1)
+    return;
 
+  if (IMU_Attitude_Update(&imu_attitude, imu_update_dt_s))
+  {
+    if (BSP_UART_IsTxReady(&huart6))
+    {
+      IMU_BuildFrame(imu_frame, &imu_attitude);
+      BSP_UART_TxData(&huart6, imu_frame, IMU_UART_FRAME_SIZE);
+    }
+  }
+}
 /* USER CODE END 4 */
 
 /**

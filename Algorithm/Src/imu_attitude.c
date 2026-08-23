@@ -1,58 +1,100 @@
 #include "imu_attitude.h"
 
+#include "bmi088.h"
+#include "imu_config.h"
+
 #include <math.h>
 
-static void IMU_Attitude_UpdateEuler(IMU_Attitude_t *attitude)
+void IMU_Attitude_Init(IMU_Attitude_t *attitude)
 {
-    float pitch_sine = 2.0f * (attitude->q0 * attitude->q2 - attitude->q3 * attitude->q1);
-    if (pitch_sine > 1.0f)
-        pitch_sine = 1.0f;
-    else if (pitch_sine < -1.0f)
-        pitch_sine = -1.0f;
+    float gyro[3];
+    float accel[3];
+    float accel_avg[3] = {0.0f, 0.0f, 0.0f};
+    double gyro_sum[3] = {0.0, 0.0, 0.0};
+    double accel_sum[3] = {0.0, 0.0, 0.0};
+    uint32_t valid_samples = 0U;
 
-    attitude->roll = atan2f(2.0f * (attitude->q0 * attitude->q1 + attitude->q2 * attitude->q3),
-                            1.0f - 2.0f * (attitude->q1 * attitude->q1 + attitude->q2 * attitude->q2));
-    attitude->pitch = asinf(pitch_sine);
-    attitude->yaw = atan2f(2.0f * (attitude->q0 * attitude->q3 + attitude->q1 * attitude->q2),
-                           1.0f - 2.0f * (attitude->q2 * attitude->q2 + attitude->q3 * attitude->q3));
-}
+    for (uint32_t sample = 0U; sample < IMU_CALIBRATION_SAMPLE_COUNT; sample++)
+    {
+        if (BMI088_Read(gyro, accel))
+        {
+            const float accel_norm = sqrtf(accel[0] * accel[0] + accel[1] * accel[1] + accel[2] * accel[2]);
+            if (fabsf(accel_norm - IMU_ATTITUDE_GRAVITY_MSS) <= IMU_CALIBRATION_ACCEL_TOLERANCE_MSS)
+            {
+                for (uint32_t axis = 0U; axis < 3U; axis++)
+                {
+                    gyro_sum[axis] += gyro[axis];
+                    accel_sum[axis] += accel[axis];
+                }
+                valid_samples++;
+            }
+        }
+        HAL_Delay(1U);
+    }
 
-void IMU_Attitude_Init(IMU_Attitude_t *attitude, const float accel[3])
-{
-    const float accel_horizontal = sqrtf(accel[1] * accel[1] + accel[2] * accel[2]);
+    if (valid_samples > 0U)
+    {
+        for (uint32_t axis = 0U; axis < 3U; axis++)
+        {
+            attitude->gyro_bias[axis] = (float)(gyro_sum[axis] / valid_samples);
+            accel_avg[axis] = (float)(accel_sum[axis] / valid_samples);
+        }
+    }
 
-    attitude->roll = atan2f(accel[1], accel[2]);
-    attitude->pitch = atan2f(-accel[0], accel_horizontal);
-    attitude->yaw = 0.0f;
+    const float accel_norm = sqrtf(accel_avg[0] * accel_avg[0] + accel_avg[1] * accel_avg[1] + accel_avg[2] * accel_avg[2]);
 
-    const float half_roll = 0.5f * attitude->roll;
-    const float half_pitch = 0.5f * attitude->pitch;
-    const float half_yaw = 0.0f;
+    if (accel_norm < 0.1f)
+    {
+        attitude->q0 = 1.0f;
+        attitude->q1 = 0.0f;
+        attitude->q2 = 0.0f;
+        attitude->q3 = 0.0f;
+    }
+    else
+    {
+        const float ax = accel_avg[0] / accel_norm;
+        const float ay = accel_avg[1] / accel_norm;
+        const float az = accel_avg[2] / accel_norm;
+        const float horizontal = sqrtf(ay * ay + az * az);
 
-    const float cr = cosf(half_roll);
-    const float sr = sinf(half_roll);
-    const float cp = cosf(half_pitch);
-    const float sp = sinf(half_pitch);
-    const float cy = cosf(half_yaw);
-    const float sy = sinf(half_yaw);
+        if (horizontal < 1e-6f)
+        {
+            const float q0 = sqrtf(0.5f);
+            attitude->q0 = q0;
+            attitude->q1 = 0.0f;
+            attitude->q2 = copysignf(q0, -ax);
+            attitude->q3 = 0.0f;
+        }
+        else
+        {
+            const float half_roll_cos = sqrtf((horizontal + az) / (2.0f * horizontal));
+            const float half_roll_sine = copysignf(sqrtf((horizontal - az) / (2.0f * horizontal)), ay);
+            const float half_pitch_cos = sqrtf(0.5f * (1.0f + horizontal));
+            const float half_pitch_sine = copysignf(sqrtf(0.5f * (1.0f - horizontal)), -ax);
 
-    attitude->q0 = cr * cp * cy + sr * sp * sy;
-    attitude->q1 = sr * cp * cy - cr * sp * sy;
-    attitude->q2 = cr * sp * cy + sr * cp * sy;
-    attitude->q3 = cr * cp * sy - sr * sp * cy;
+            attitude->q0 = half_roll_cos * half_pitch_cos;
+            attitude->q1 = half_roll_sine * half_pitch_cos;
+            attitude->q2 = half_roll_cos * half_pitch_sine;
+            attitude->q3 = 0.0f;
+        }
+    }
+
     attitude->integral_error[0] = 0.0f;
     attitude->integral_error[1] = 0.0f;
     attitude->integral_error[2] = 0.0f;
 }
 
-void IMU_Attitude_Update(IMU_Attitude_t *attitude,
-                         const float gyro[3],
-                         const float accel[3],
-                         float dt)
+bool IMU_Attitude_Update(IMU_Attitude_t *attitude, float dt)
 {
-    float gx = gyro[0];
-    float gy = gyro[1];
-    float gz = gyro[2];
+    float gyro[3];
+    float accel[3];
+
+    if (!BMI088_Read(gyro, accel))
+        return false;
+
+    float gx = gyro[0] - attitude->gyro_bias[0];
+    float gy = gyro[1] - attitude->gyro_bias[1];
+    float gz = gyro[2] - attitude->gyro_bias[2];
     const float accel_norm = sqrtf(accel[0] * accel[0] + accel[1] * accel[1] + accel[2] * accel[2]);
 
 #if IMU_ATTITUDE_USE_ACCEL_CORRECTION
@@ -99,5 +141,6 @@ void IMU_Attitude_Update(IMU_Attitude_t *attitude,
     attitude->q1 /= quaternion_norm;
     attitude->q2 /= quaternion_norm;
     attitude->q3 /= quaternion_norm;
-    IMU_Attitude_UpdateEuler(attitude);
+
+    return true;
 }
