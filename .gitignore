@@ -1,2 +1,4 @@
-.vscode/
-.clangd
+build
+mx.scratch
+!.settings
+.mxproject
