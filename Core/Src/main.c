@@ -21,6 +21,8 @@
 #include "can.h"
 #include "dma.h"
 #include "spi.h"
+#include "stm32f407xx.h"
+#include "stm32f4xx_hal_gpio.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -191,11 +193,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
   if (IMU_Attitude_Update(&imu_attitude, imu_update_dt_s))
   {
-    if (BSP_UART_IsTxReady(&huart6))
-    {
       IMU_BuildFrame(imu_frame, &imu_attitude);
       BSP_UART_TxData(&huart6, imu_frame, IMU_UART_FRAME_SIZE);
-    }
   }
 }
 /* USER CODE END 4 */
