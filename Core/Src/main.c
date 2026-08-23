@@ -28,8 +28,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "bmi088.h"
+#include "bsp_uart.h"
 #include "imu_attitude.h"
-#include "imu_config.h"
 #include "uart_ports.h"
 #include <string.h>
 /* USER CODE END Includes */
@@ -56,6 +56,7 @@
 /* USER CODE BEGIN PV */
 IMU_Attitude_t imu_attitude;
 uint8_t imu_frame[IMU_UART_FRAME_SIZE];
+float imu_update_dt_s;
 
 /* USER CODE END PV */
 
@@ -67,6 +68,15 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+static void IMU_BuildFrame(uint8_t *frame, const IMU_Attitude_t *attitude)
+{
+  frame[0] = IMU_UART_FRAME_HEADER;
+  memcpy(&frame[1], &attitude->q0, sizeof(float));
+  memcpy(&frame[1 + sizeof(float)], &attitude->q1, sizeof(float));
+  memcpy(&frame[1 + 2 * sizeof(float)], &attitude->q2, sizeof(float));
+  memcpy(&frame[1 + 3 * sizeof(float)], &attitude->q3, sizeof(float));
+}
 
 /* USER CODE END 0 */
 
@@ -113,6 +123,7 @@ int main(void)
   BMI088_Init();
   UART_Ports_Init();
   IMU_Attitude_Init(&imu_attitude);
+  imu_update_dt_s = (float)((htim1.Init.Prescaler + 1U) * (htim1.Init.Period + 1U)) / (float)SystemCoreClock;
   HAL_TIM_Base_Start_IT(&htim1);
   /* USER CODE END 2 */
 
@@ -178,16 +189,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if (htim != &htim1)
     return;
 
-  if (IMU_Attitude_Update(&imu_attitude, IMU_UPDATE_DT_S))
+  if (IMU_Attitude_Update(&imu_attitude, imu_update_dt_s))
   {
-    if (HAL_UART_GetState(&huart6) == HAL_UART_STATE_READY)
+    if (BSP_UART_IsTxReady(&huart6))
     {
-      imu_frame[0] = IMU_UART_FRAME_HEADER;
-      memcpy(&imu_frame[1], &imu_attitude.q0, sizeof(float));
-      memcpy(&imu_frame[1 + sizeof(float)], &imu_attitude.q1, sizeof(float));
-      memcpy(&imu_frame[1 + 2 * sizeof(float)], &imu_attitude.q2, sizeof(float));
-      memcpy(&imu_frame[1 + 3 * sizeof(float)], &imu_attitude.q3, sizeof(float));
-      HAL_UART_Transmit_DMA(&huart6, imu_frame, IMU_UART_FRAME_SIZE);
+      IMU_BuildFrame(imu_frame, &imu_attitude);
+      BSP_UART_TxData(&huart6, imu_frame, IMU_UART_FRAME_SIZE);
     }
   }
 }
