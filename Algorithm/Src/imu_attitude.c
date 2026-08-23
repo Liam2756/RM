@@ -1,5 +1,8 @@
 #include "imu_attitude.h"
 
+#include "bmi088.h"
+#include "imu_config.h"
+
 #include <math.h>
 
 static void IMU_Attitude_UpdateEuler(IMU_Attitude_t *attitude)
@@ -17,12 +20,46 @@ static void IMU_Attitude_UpdateEuler(IMU_Attitude_t *attitude)
                            1.0f - 2.0f * (attitude->q2 * attitude->q2 + attitude->q3 * attitude->q3));
 }
 
-void IMU_Attitude_Init(IMU_Attitude_t *attitude, const float accel[3])
+void IMU_Attitude_Init(IMU_Attitude_t *attitude)
 {
-    const float accel_horizontal = sqrtf(accel[1] * accel[1] + accel[2] * accel[2]);
+    float gyro[3];
+    float accel[3];
+    float accel_avg[3] = {0.0f, 0.0f, 0.0f};
+    double gyro_sum[3] = {0.0, 0.0, 0.0};
+    double accel_sum[3] = {0.0, 0.0, 0.0};
+    uint32_t valid_samples = 0U;
 
-    attitude->roll = atan2f(accel[1], accel[2]);
-    attitude->pitch = atan2f(-accel[0], accel_horizontal);
+    for (uint32_t sample = 0U; sample < IMU_CALIBRATION_SAMPLE_COUNT; sample++)
+    {
+        if (BMI088_Read(gyro, accel))
+        {
+            const float accel_norm = sqrtf(accel[0] * accel[0] + accel[1] * accel[1] + accel[2] * accel[2]);
+            if (fabsf(accel_norm - IMU_ATTITUDE_GRAVITY_MSS) <= IMU_CALIBRATION_ACCEL_TOLERANCE_MSS)
+            {
+                for (uint32_t axis = 0U; axis < 3U; axis++)
+                {
+                    gyro_sum[axis] += gyro[axis];
+                    accel_sum[axis] += accel[axis];
+                }
+                valid_samples++;
+            }
+        }
+        HAL_Delay(1U);
+    }
+
+    if (valid_samples > 0U)
+    {
+        for (uint32_t axis = 0U; axis < 3U; axis++)
+        {
+            attitude->gyro_bias[axis] = (float)(gyro_sum[axis] / valid_samples);
+            accel_avg[axis] = (float)(accel_sum[axis] / valid_samples);
+        }
+    }
+
+    const float accel_horizontal = sqrtf(accel_avg[1] * accel_avg[1] + accel_avg[2] * accel_avg[2]);
+
+    attitude->roll = atan2f(accel_avg[1], accel_avg[2]);
+    attitude->pitch = atan2f(-accel_avg[0], accel_horizontal);
     attitude->yaw = 0.0f;
 
     const float half_roll = 0.5f * attitude->roll;

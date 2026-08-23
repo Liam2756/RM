@@ -31,7 +31,6 @@
 #include "imu_attitude.h"
 #include "imu_config.h"
 #include "uart_ports.h"
-#include <math.h>
 #include <string.h>
 /* USER CODE END Includes */
 
@@ -58,7 +57,6 @@
 IMU_Attitude_t imu_attitude;
 float imu_gyro[3];
 float imu_accel[3];
-float imu_gyro_bias[3];
 uint8_t imu_frame[IMU_UART_FRAME_SIZE];
 volatile uint8_t imu_update_pending;
 
@@ -72,43 +70,6 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-static void IMU_Calibrate(void)
-{
-  double gyro_sum[3] = {0.0, 0.0, 0.0};
-  double accel_sum[3] = {0.0, 0.0, 0.0};
-  uint32_t valid_samples = 0U;
-
-  for (uint32_t sample = 0U; sample < IMU_CALIBRATION_SAMPLE_COUNT; sample++)
-  {
-    if (BMI088_Read(imu_gyro, imu_accel))
-    {
-      const float accel_norm = sqrtf(imu_accel[0] * imu_accel[0] +
-                                     imu_accel[1] * imu_accel[1] +
-                                     imu_accel[2] * imu_accel[2]);
-      if (fabsf(accel_norm - IMU_ATTITUDE_GRAVITY_MSS) <= IMU_CALIBRATION_ACCEL_TOLERANCE_MSS)
-      {
-        for (uint32_t axis = 0U; axis < 3U; axis++)
-        {
-          gyro_sum[axis] += imu_gyro[axis];
-          accel_sum[axis] += imu_accel[axis];
-        }
-        valid_samples++;
-      }
-    }
-    HAL_Delay(1U);
-  }
-
-  if (valid_samples > 0U)
-  {
-    for (uint32_t axis = 0U; axis < 3U; axis++)
-    {
-      imu_gyro_bias[axis] = (float)(gyro_sum[axis] / valid_samples);
-      imu_accel[axis] = (float)(accel_sum[axis] / valid_samples);
-    }
-  }
-  IMU_Attitude_Init(&imu_attitude, imu_accel);
-}
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
@@ -162,7 +123,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   BMI088_Init();
   UART_Ports_Init();
-  IMU_Calibrate();
+  IMU_Attitude_Init(&imu_attitude);
   HAL_TIM_Base_Start_IT(&htim1);
   /* USER CODE END 2 */
 
@@ -176,7 +137,7 @@ int main(void)
       if (BMI088_Read(imu_gyro, imu_accel))
       {
         for (uint32_t axis = 0U; axis < 3U; axis++)
-          imu_gyro[axis] -= imu_gyro_bias[axis];
+          imu_gyro[axis] -= imu_attitude.gyro_bias[axis];
 
         IMU_Attitude_Update(&imu_attitude, imu_gyro, imu_accel, IMU_UPDATE_DT_S);
 

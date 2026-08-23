@@ -14,12 +14,13 @@ typedef struct
     float q2;
     float q3;
     float integral_error[3];
+    float gyro_bias[3];
     float roll;
     float pitch;
     float yaw;
 } IMU_Attitude_t;
 
-void IMU_Attitude_Init(IMU_Attitude_t *attitude, const float accel[3]);
+void IMU_Attitude_Init(IMU_Attitude_t *attitude);
 void IMU_Attitude_Update(IMU_Attitude_t *attitude,
                          const float gyro[3],
                          const float accel[3],
