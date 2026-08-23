@@ -17,7 +17,6 @@ typedef struct
 void BSP_UART_Register(const BSP_UART_PortConfig_t *port);
 void BSP_UART_StartReceive(UART_HandleTypeDef *huart);
 void BSP_UART_StartReceiveAll(void);
-bool BSP_UART_IsTxReady(UART_HandleTypeDef *huart);
-void BSP_UART_TxData(UART_HandleTypeDef *huart, uint8_t *data, uint16_t size);
+HAL_StatusTypeDef BSP_UART_TxData(UART_HandleTypeDef *huart, uint8_t *data, uint16_t size);
 
 #endif /* BSP_UART_H */

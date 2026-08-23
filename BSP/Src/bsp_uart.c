@@ -35,14 +35,9 @@ void BSP_UART_StartReceiveAll(void)
         BSP_UART_StartReceive(g_uart_ports[i].huart);
 }
 
-bool BSP_UART_IsTxReady(UART_HandleTypeDef *huart)
+HAL_StatusTypeDef BSP_UART_TxData(UART_HandleTypeDef *huart, uint8_t *data, uint16_t size)
 {
-    return HAL_UART_GetState(huart) == HAL_UART_STATE_READY;
-}
-
-void BSP_UART_TxData(UART_HandleTypeDef *huart, uint8_t *data, uint16_t size)
-{
-    HAL_UART_Transmit_DMA(huart, data, size);
+    return HAL_UART_Transmit_DMA(huart, data, size);
 }
 
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
