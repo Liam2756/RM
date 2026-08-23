@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#define IMU_ATTITUDE_USE_ACCEL_CORRECTION  1U
+#define IMU_ATTITUDE_USE_ACCEL_CORRECTION  0U
 #define IMU_ATTITUDE_MAHONY_KP             2.0f
 #define IMU_ATTITUDE_MAHONY_KI             0.05f
 #define IMU_ATTITUDE_GRAVITY_MSS           9.80665f
