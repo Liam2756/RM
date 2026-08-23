@@ -87,9 +87,9 @@ void IMU_Attitude_Update(IMU_Attitude_t *attitude,
                          const float accel[3],
                          float dt)
 {
-    float gx = gyro[0];
-    float gy = gyro[1];
-    float gz = gyro[2];
+    float gx = gyro[0] - attitude->gyro_bias[0];
+    float gy = gyro[1] - attitude->gyro_bias[1];
+    float gz = gyro[2] - attitude->gyro_bias[2];
     const float accel_norm = sqrtf(accel[0] * accel[0] + accel[1] * accel[1] + accel[2] * accel[2]);
 
 #if IMU_ATTITUDE_USE_ACCEL_CORRECTION

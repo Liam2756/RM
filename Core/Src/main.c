@@ -182,9 +182,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
   if (BMI088_Read(imu_gyro, imu_accel))
   {
-    for (uint32_t axis = 0U; axis < 3U; axis++)
-      imu_gyro[axis] -= imu_attitude.gyro_bias[axis];
-
     IMU_Attitude_Update(&imu_attitude, imu_gyro, imu_accel, IMU_UPDATE_DT_S);
 
     if (HAL_UART_GetState(&huart6) == HAL_UART_STATE_READY)
