@@ -58,7 +58,6 @@ IMU_Attitude_t imu_attitude;
 float imu_gyro[3];
 float imu_accel[3];
 uint8_t imu_frame[IMU_UART_FRAME_SIZE];
-volatile uint8_t imu_update_pending;
 
 /* USER CODE END PV */
 
@@ -70,14 +69,6 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-  if (htim == &htim1)
-  {
-    imu_update_pending = 1U;
-  }
-}
 
 /* USER CODE END 0 */
 
@@ -131,26 +122,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    if (imu_update_pending)
-    {
-      imu_update_pending = 0U;
-      if (BMI088_Read(imu_gyro, imu_accel))
-      {
-        for (uint32_t axis = 0U; axis < 3U; axis++)
-          imu_gyro[axis] -= imu_attitude.gyro_bias[axis];
-
-        IMU_Attitude_Update(&imu_attitude, imu_gyro, imu_accel, IMU_UPDATE_DT_S);
-
-        if (HAL_UART_GetState(&huart6) == HAL_UART_STATE_READY)
-        {
-          imu_frame[0] = IMU_UART_FRAME_HEADER;
-          memcpy(&imu_frame[1], &imu_attitude.roll, sizeof(float));
-          memcpy(&imu_frame[1 + sizeof(float)], &imu_attitude.pitch, sizeof(float));
-          memcpy(&imu_frame[1 + 2 * sizeof(float)], &imu_attitude.yaw, sizeof(float));
-          HAL_UART_Transmit_DMA(&huart6, imu_frame, IMU_UART_FRAME_SIZE);
-        }
-      }
-    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -204,7 +175,28 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim != &htim1)
+    return;
 
+  if (BMI088_Read(imu_gyro, imu_accel))
+  {
+    for (uint32_t axis = 0U; axis < 3U; axis++)
+      imu_gyro[axis] -= imu_attitude.gyro_bias[axis];
+
+    IMU_Attitude_Update(&imu_attitude, imu_gyro, imu_accel, IMU_UPDATE_DT_S);
+
+    if (HAL_UART_GetState(&huart6) == HAL_UART_STATE_READY)
+    {
+      imu_frame[0] = IMU_UART_FRAME_HEADER;
+      memcpy(&imu_frame[1], &imu_attitude.roll, sizeof(float));
+      memcpy(&imu_frame[1 + sizeof(float)], &imu_attitude.pitch, sizeof(float));
+      memcpy(&imu_frame[1 + 2 * sizeof(float)], &imu_attitude.yaw, sizeof(float));
+      HAL_UART_Transmit_DMA(&huart6, imu_frame, IMU_UART_FRAME_SIZE);
+    }
+  }
+}
 /* USER CODE END 4 */
 
 /**
