@@ -55,8 +55,6 @@
 
 /* USER CODE BEGIN PV */
 IMU_Attitude_t imu_attitude;
-float imu_gyro[3];
-float imu_accel[3];
 uint8_t imu_frame[IMU_UART_FRAME_SIZE];
 
 /* USER CODE END PV */
@@ -180,10 +178,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if (htim != &htim1)
     return;
 
-  if (BMI088_Read(imu_gyro, imu_accel))
+  if (IMU_Attitude_Update(&imu_attitude, IMU_UPDATE_DT_S))
   {
-    IMU_Attitude_Update(&imu_attitude, imu_gyro, imu_accel, IMU_UPDATE_DT_S);
-
     if (HAL_UART_GetState(&huart6) == HAL_UART_STATE_READY)
     {
       imu_frame[0] = IMU_UART_FRAME_HEADER;

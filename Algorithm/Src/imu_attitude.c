@@ -5,21 +5,6 @@
 
 #include <math.h>
 
-static void IMU_Attitude_UpdateEuler(IMU_Attitude_t *attitude)
-{
-    float pitch_sine = 2.0f * (attitude->q0 * attitude->q2 - attitude->q3 * attitude->q1);
-    if (pitch_sine > 1.0f)
-        pitch_sine = 1.0f;
-    else if (pitch_sine < -1.0f)
-        pitch_sine = -1.0f;
-
-    attitude->roll = atan2f(2.0f * (attitude->q0 * attitude->q1 + attitude->q2 * attitude->q3),
-                            1.0f - 2.0f * (attitude->q1 * attitude->q1 + attitude->q2 * attitude->q2));
-    attitude->pitch = asinf(pitch_sine);
-    attitude->yaw = atan2f(2.0f * (attitude->q0 * attitude->q3 + attitude->q1 * attitude->q2),
-                           1.0f - 2.0f * (attitude->q2 * attitude->q2 + attitude->q3 * attitude->q3));
-}
-
 void IMU_Attitude_Init(IMU_Attitude_t *attitude)
 {
     float gyro[3];
@@ -99,11 +84,14 @@ void IMU_Attitude_Init(IMU_Attitude_t *attitude)
     attitude->integral_error[2] = 0.0f;
 }
 
-void IMU_Attitude_Update(IMU_Attitude_t *attitude,
-                         const float gyro[3],
-                         const float accel[3],
-                         float dt)
+bool IMU_Attitude_Update(IMU_Attitude_t *attitude, float dt)
 {
+    float gyro[3];
+    float accel[3];
+
+    if (!BMI088_Read(gyro, accel))
+        return false;
+
     float gx = gyro[0] - attitude->gyro_bias[0];
     float gy = gyro[1] - attitude->gyro_bias[1];
     float gz = gyro[2] - attitude->gyro_bias[2];
@@ -153,5 +141,6 @@ void IMU_Attitude_Update(IMU_Attitude_t *attitude,
     attitude->q1 /= quaternion_norm;
     attitude->q2 /= quaternion_norm;
     attitude->q3 /= quaternion_norm;
-    IMU_Attitude_UpdateEuler(attitude);
+
+    return true;
 }
