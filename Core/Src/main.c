@@ -43,7 +43,7 @@
 /* USER CODE BEGIN PD */
 
 #define IMU_UART_FRAME_HEADER     (0x5A)
-#define IMU_UART_FRAME_SIZE       ((uint16_t)(1 + 3 * sizeof(float)))
+#define IMU_UART_FRAME_SIZE       ((uint16_t)(1 + 4 * sizeof(float)))
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -187,9 +187,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     if (HAL_UART_GetState(&huart6) == HAL_UART_STATE_READY)
     {
       imu_frame[0] = IMU_UART_FRAME_HEADER;
-      memcpy(&imu_frame[1], &imu_attitude.roll, sizeof(float));
-      memcpy(&imu_frame[1 + sizeof(float)], &imu_attitude.pitch, sizeof(float));
-      memcpy(&imu_frame[1 + 2 * sizeof(float)], &imu_attitude.yaw, sizeof(float));
+      memcpy(&imu_frame[1], &imu_attitude.q0, sizeof(float));
+      memcpy(&imu_frame[1 + sizeof(float)], &imu_attitude.q1, sizeof(float));
+      memcpy(&imu_frame[1 + 2 * sizeof(float)], &imu_attitude.q2, sizeof(float));
+      memcpy(&imu_frame[1 + 3 * sizeof(float)], &imu_attitude.q3, sizeof(float));
       HAL_UART_Transmit_DMA(&huart6, imu_frame, IMU_UART_FRAME_SIZE);
     }
   }
