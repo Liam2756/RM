@@ -21,8 +21,6 @@
 #include "can.h"
 #include "dma.h"
 #include "spi.h"
-#include "stm32f407xx.h"
-#include "stm32f4xx_hal_gpio.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -34,6 +32,7 @@
 #include "crc.h"
 #include "imu_attitude.h"
 #include "uart_ports.h"
+#include <stdint.h>
 #include <string.h>
 /* USER CODE END Includes */
 
