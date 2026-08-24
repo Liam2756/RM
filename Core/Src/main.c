@@ -31,6 +31,7 @@
 /* USER CODE BEGIN Includes */
 #include "bmi088.h"
 #include "bsp_uart.h"
+#include "crc.h"
 #include "imu_attitude.h"
 #include "uart_ports.h"
 #include <string.h>
@@ -45,8 +46,7 @@
 /* USER CODE BEGIN PD */
 
 #define IMU_UART_FRAME_HEADER     (0x5A)
-#define IMU_UART_FRAME_DATA_SIZE  ((uint16_t)(1U + 4U * sizeof(float)))
-#define IMU_UART_FRAME_SIZE       ((uint16_t)(IMU_UART_FRAME_DATA_SIZE + 2U))
+#define IMU_UART_FRAME_SIZE       ((uint16_t)(1U + 4U * sizeof(float) + 2U))
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -72,26 +72,6 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-static uint16_t IMU_CalculateModbusCrc16(const uint8_t *data, uint16_t size)
-{
-  uint16_t crc = 0xFFFFU;
-
-  for (uint16_t index = 0U; index < size; index++)
-  {
-    crc ^= data[index];
-
-    for (uint8_t bit = 0U; bit < 8U; bit++)
-    {
-      if ((crc & 0x0001U) != 0U)
-        crc = (crc >> 1U) ^ 0xA001U;
-      else
-        crc >>= 1U;
-    }
-  }
-
-  return crc;
-}
-
 static void IMU_BuildFrame(uint8_t *frame, const IMU_Attitude_t *attitude)
 {
   frame[0] = IMU_UART_FRAME_HEADER;
@@ -99,10 +79,7 @@ static void IMU_BuildFrame(uint8_t *frame, const IMU_Attitude_t *attitude)
   memcpy(&frame[1 + sizeof(float)], &attitude->q1, sizeof(float));
   memcpy(&frame[1 + 2 * sizeof(float)], &attitude->q2, sizeof(float));
   memcpy(&frame[1 + 3 * sizeof(float)], &attitude->q3, sizeof(float));
-
-  const uint16_t crc = IMU_CalculateModbusCrc16(frame, IMU_UART_FRAME_DATA_SIZE);
-  frame[IMU_UART_FRAME_DATA_SIZE] = (uint8_t)crc;
-  frame[IMU_UART_FRAME_DATA_SIZE + 1U] = (uint8_t)(crc >> 8U);
+  CRC16_Append(frame, IMU_UART_FRAME_SIZE);
 }
 
 /* USER CODE END 0 */

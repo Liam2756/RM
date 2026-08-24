@@ -45,6 +45,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
+    ${CMAKE_CURRENT_SOURCE_DIR}/Algorithm/Src/crc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Algorithm/Src/imu_attitude.c
     ${CMAKE_CURRENT_SOURCE_DIR}/BSP/Src/bmi088.c
     ${CMAKE_CURRENT_SOURCE_DIR}/BSP/Src/bsp_uart.c
