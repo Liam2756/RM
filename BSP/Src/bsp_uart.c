@@ -1,4 +1,8 @@
 #include "bsp_uart.h"
+#include "uart_ports.h"
+#include "usart.h"
+
+extern void BSP_UART_DT7_DataReadyCallback(uint8_t *buf, uint16_t size);
 
 static BSP_UART_PortConfig_t g_uart_ports[BSP_UART_MAX_PORTS];
 static uint8_t g_uart_port_count = 0U;
@@ -44,4 +48,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
 {
     (void)size;
     BSP_UART_StartReceive(huart);
+
+    if (huart == &huart3)
+        BSP_UART_DT7_DataReadyCallback(g_uart3_rx_buf, size);
 }
