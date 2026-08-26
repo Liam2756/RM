@@ -16,5 +16,6 @@ typedef struct
 void Vision_UART_Init(void);
 void Vision_UART_DataReadyCallback(uint8_t *buf, uint16_t size);
 uint8_t Vision_UART_GetNewTarget(Vision_Target_t *target);
+uint8_t Vision_UART_GetLatestTarget(Vision_Target_t *target);
 
 #endif /* VISION_UART_H */

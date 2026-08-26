@@ -136,7 +136,8 @@ void App_ControlTask1ms(void)
         {
             float gyro[3];
             float accel[3];
-            float sensor_plot[6];
+            Vision_Target_t latest_target;
+            float sensor_plot[9] = {0.0f};
             sensor_plot_div = 0U;
             if (IMU_Attitude_GetLatestSensor(gyro, accel))
             {
@@ -146,7 +147,13 @@ void App_ControlTask1ms(void)
                 sensor_plot[3] = accel[0];
                 sensor_plot[4] = accel[1];
                 sensor_plot[5] = accel[2];
-                BSP_Debug_SerialPlot(&huart1, sensor_plot, 6U);
+                if (Vision_UART_GetLatestTarget(&latest_target) != 0U)
+                {
+                    sensor_plot[6] = latest_target.x_mm;
+                    sensor_plot[7] = latest_target.y_mm;
+                    sensor_plot[8] = latest_target.z_mm;
+                }
+                BSP_Debug_SerialPlot(&huart1, sensor_plot, 9U);
             }
         }
     }
