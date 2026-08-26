@@ -27,6 +27,7 @@
 #include <filter.h>
 #include <gimbal.h>
 #include <hero_motor_config.h>
+#include <imu_attitude.h>
 #include <tim.h>
 #include <usart.h>   /* 调试 SerialPlot 下发口句柄（huart1，见下方 PLOT 宏）*/
 #include <math.h>
@@ -39,6 +40,9 @@
 #define GIMBAL_DEBUG_PLOT_ENABLE   1
 #define GIMBAL_DEBUG_PLOT_UART     (&huart1)
 #define GIMBAL_DEBUG_PLOT_DIVIDER  1U   /* 每 N 个 1kHz 周期发一帧（USART1 取 1 = 全速）*/
+
+#define IMU_SENSOR_SERIALPLOT_ENABLE  1U
+#define IMU_SENSOR_SERIALPLOT_DIVIDER 10U
 
 void App_Init(void)
 {
@@ -125,7 +129,28 @@ void App_ControlTask1ms(void)
 
     (void)HeroMotorTx_FlushAll();
 
-#if GIMBAL_DEBUG_PLOT_ENABLE
+#if IMU_SENSOR_SERIALPLOT_ENABLE
+    {
+        static uint16_t sensor_plot_div;
+        if (++sensor_plot_div >= IMU_SENSOR_SERIALPLOT_DIVIDER)
+        {
+            float gyro[3];
+            float accel[3];
+            float sensor_plot[6];
+            sensor_plot_div = 0U;
+            if (IMU_Attitude_GetLatestSensor(gyro, accel))
+            {
+                sensor_plot[0] = gyro[0];
+                sensor_plot[1] = gyro[1];
+                sensor_plot[2] = gyro[2];
+                sensor_plot[3] = accel[0];
+                sensor_plot[4] = accel[1];
+                sensor_plot[5] = accel[2];
+                BSP_Debug_SerialPlot(&huart1, sensor_plot, 6U);
+            }
+        }
+    }
+#elif GIMBAL_DEBUG_PLOT_ENABLE
     /* Pitch 串级环采样下发（降采样后经 DMA 送 SerialPlot）。数据仅在 arm 周期刷新，
        保险/离线时为上一次值（各环停算），对整定无碍——整定始终在 arm 下进行。 */
     {
