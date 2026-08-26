@@ -4,6 +4,32 @@
 #include "imu_config.h"
 
 #include <math.h>
+#include <string.h>
+
+static float s_latest_gyro[3];
+static float s_latest_accel[3];
+static bool s_latest_sensor_valid;
+
+bool IMU_Attitude_ReadSensor(float gyro[3], float accel[3])
+{
+    if (!BMI088_Read(gyro, accel))
+        return false;
+
+    memcpy(s_latest_gyro, gyro, sizeof(s_latest_gyro));
+    memcpy(s_latest_accel, accel, sizeof(s_latest_accel));
+    s_latest_sensor_valid = true;
+    return true;
+}
+
+bool IMU_Attitude_GetLatestSensor(float gyro[3], float accel[3])
+{
+    if (!s_latest_sensor_valid)
+        return false;
+
+    memcpy(gyro, s_latest_gyro, sizeof(s_latest_gyro));
+    memcpy(accel, s_latest_accel, sizeof(s_latest_accel));
+    return true;
+}
 
 void IMU_Attitude_Init(IMU_Attitude_t *attitude)
 {
@@ -16,7 +42,7 @@ void IMU_Attitude_Init(IMU_Attitude_t *attitude)
 
     for (uint32_t sample = 0U; sample < IMU_CALIBRATION_SAMPLE_COUNT; sample++)
     {
-        if (BMI088_Read(gyro, accel))
+        if (IMU_Attitude_ReadSensor(gyro, accel))
         {
             const float accel_norm = sqrtf(accel[0] * accel[0] + accel[1] * accel[1] + accel[2] * accel[2]);
             if (fabsf(accel_norm - IMU_ATTITUDE_GRAVITY_MSS) <= IMU_CALIBRATION_ACCEL_TOLERANCE_MSS)
@@ -89,7 +115,7 @@ bool IMU_Attitude_Update(IMU_Attitude_t *attitude, float dt)
     float gyro[3];
     float accel[3];
 
-    if (!BMI088_Read(gyro, accel))
+    if (!IMU_Attitude_ReadSensor(gyro, accel))
         return false;
 
     float gx = gyro[0] - attitude->gyro_bias[0];

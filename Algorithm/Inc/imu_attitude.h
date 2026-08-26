@@ -21,5 +21,7 @@ typedef struct
 
 void IMU_Attitude_Init(IMU_Attitude_t *attitude);
 bool IMU_Attitude_Update(IMU_Attitude_t *attitude, float dt);
+bool IMU_Attitude_ReadSensor(float gyro[3], float accel[3]);
+bool IMU_Attitude_GetLatestSensor(float gyro[3], float accel[3]);
 
 #endif

@@ -21,8 +21,6 @@
 #include "can.h"
 #include "dma.h"
 #include "spi.h"
-#include "stm32f407xx.h"
-#include "stm32f4xx_hal_gpio.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -34,6 +32,8 @@
 #include "crc.h"
 #include "imu_attitude.h"
 #include "uart_ports.h"
+#include "app.h"
+#include <stdint.h>
 #include <string.h>
 /* USER CODE END Includes */
 
@@ -124,10 +124,14 @@ int main(void)
   MX_TIM10_Init();
   MX_TIM8_Init();
   /* USER CODE BEGIN 2 */
-  BMI088_Init();
+  if (!BMI088_Init())
+  {
+    Error_Handler();
+  }
   UART_Ports_Init();
   IMU_Attitude_Init(&imu_attitude);
   imu_update_dt_s = (float)((htim1.Init.Prescaler + 1U) * (htim1.Init.Period + 1U)) / (float)SystemCoreClock;
+  App_Init();
   HAL_TIM_Base_Start_IT(&htim1);
   /* USER CODE END 2 */
 
@@ -198,6 +202,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
       IMU_BuildFrame(imu_frame, &imu_attitude);
       BSP_UART_TxData(&huart6, imu_frame, IMU_UART_FRAME_SIZE);
   }
+
+  App_ControlTask1ms();
 }
 /* USER CODE END 4 */
 
