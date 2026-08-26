@@ -7,6 +7,7 @@ static uint8_t s_frame[VISION_UART_FRAME_SIZE];
 static uint8_t s_frame_size;
 static Vision_Target_t s_target;
 static uint8_t s_target_pending;
+static uint8_t s_target_valid;
 
 static void Vision_UART_SubmitFrame(const uint8_t *frame)
 {
@@ -29,6 +30,7 @@ static void Vision_UART_SubmitFrame(const uint8_t *frame)
     __disable_irq();
     s_target = target;
     s_target_pending = 1U;
+    s_target_valid = 1U;
     if (primask == 0U)
     {
         __enable_irq();
@@ -44,6 +46,7 @@ void Vision_UART_Init(void)
     s_frame_size = 0U;
     memset(&s_target, 0, sizeof(s_target));
     s_target_pending = 0U;
+    s_target_valid = 0U;
     if (primask == 0U)
     {
         __enable_irq();
@@ -100,6 +103,34 @@ uint8_t Vision_UART_GetNewTarget(Vision_Target_t *target)
 
     *target = s_target;
     s_target_pending = 0U;
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
+    return 1U;
+}
+
+uint8_t Vision_UART_GetLatestTarget(Vision_Target_t *target)
+{
+    uint32_t primask;
+
+    if (target == 0)
+    {
+        return 0U;
+    }
+
+    primask = __get_PRIMASK();
+    __disable_irq();
+    if (s_target_valid == 0U)
+    {
+        if (primask == 0U)
+        {
+            __enable_irq();
+        }
+        return 0U;
+    }
+
+    *target = s_target;
     if (primask == 0U)
     {
         __enable_irq();
