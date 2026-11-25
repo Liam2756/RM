@@ -1,71 +1,105 @@
 #include "heat_estimate.h"
-#include "heat_monitor.h"
+#include "heat_rules_2027.h"
 #include <assert.h>
 
-static void expect_heat(const HeatEstimate *estimate, uint32_t at_ms, uint64_t expected)
+static void expect_heat(const HeatEstimate *estimate, uint64_t expected)
 {
     uint64_t value;
-    assert(heat_estimate_read(estimate, at_ms, &value));
+    assert(heat_estimate_read(estimate, &value));
     assert(value == expected);
 }
 
-static void confirmed_events_and_late_report(void)
+static void burst_cooling_boundary(void)
 {
-    /* 人工测试参数；第 40 次通过已包含在起点内。 */
-    HeatEstimate estimate = heat_estimate_begin(3, 40, 100, 4, 2);
-    assert(heat_estimate_observe(&estimate, 40, 100, 2));
-    expect_heat(&estimate, 100, 3000);
-    assert(heat_estimate_observe(&estimate, 41, 200, 2));
-    assert(heat_estimate_observe(&estimate, 41, 200, 2));
-    expect_heat(&estimate, 200, 6800);
-    assert(heat_estimate_observe(&estimate, 42, 200, 2));
-    expect_heat(&estimate, 200, 10800);
-
-    HeatReading report = {3, 210, true};
-    HeatReading limit = {12, 210, true};
-    assert(heat_monitor_compare(report, limit, 210, 0, 0) == HEAT_BELOW_LIMIT);
-    expect_heat(&estimate, 210, 10780);
-    /* 显示刷新不推进事件处理时钟，接下来仍可处理时间戳 205 的事件。 */
-    assert(heat_estimate_observe(&estimate, 43, 205, 2));
-    expect_heat(&estimate, 210, 14780);
+    HeatEstimate estimate = heat_estimate_begin(
+        30, RMUL2027_17MM_HEAT_PER_EVENT, RMUL2027_HEAT_COOLING_PERIOD_MS);
+    assert(heat_estimate_step(&estimate, 0, 99, RMUL2027_INFANTRY_BURST_COOLING_PER_S));
+    expect_heat(&estimate, 30000);
+    assert(heat_estimate_step(&estimate, 0, 1, RMUL2027_INFANTRY_BURST_COOLING_PER_S));
+    expect_heat(&estimate, 28600);
+    assert(heat_estimate_step(&estimate, 0, 250, RMUL2027_INFANTRY_BURST_COOLING_PER_S));
+    expect_heat(&estimate, 25800);
+    assert(estimate.cooling_elapsed_ms == 50);
+    assert(heat_estimate_step(&estimate, 0, 50, RMUL2027_INFANTRY_BURST_COOLING_PER_S));
+    expect_heat(&estimate, 24400);
 }
 
-static void cooling_and_wrap(void)
+static void cool_profile_and_batch_count(void)
 {
-    HeatEstimate estimate = heat_estimate_begin(1, UINT32_MAX, UINT32_MAX - 2, 4, 3);
-    assert(heat_estimate_observe(&estimate, 0, 1, 3));
-    expect_heat(&estimate, 1, 4988);
-    assert(heat_estimate_observe(&estimate, 0, 101, 5));
-    expect_heat(&estimate, 201, 4188);
-    expect_heat(&estimate, 5000, 0);
-    assert(heat_estimate_observe(&estimate, 1, 5000, 0));
-    expect_heat(&estimate, 5500, 4000);
+    HeatEstimate estimate = heat_estimate_begin(
+        0, RMUL2027_17MM_HEAT_PER_EVENT, RMUL2027_HEAT_COOLING_PERIOD_MS);
+    assert(heat_estimate_step(&estimate, 3, 1, RMUL2027_INFANTRY_COOL_COOLING_PER_S));
+    expect_heat(&estimate, 30000);
+    assert(heat_estimate_step(&estimate, 0, 98, RMUL2027_INFANTRY_COOL_COOLING_PER_S));
+    expect_heat(&estimate, 30000);
+    assert(heat_estimate_step(&estimate, 0, 1, RMUL2027_INFANTRY_COOL_COOLING_PER_S));
+    expect_heat(&estimate, 27600);
+    expect_heat(&estimate, 27600);
 }
 
-static void invalid_history_and_new_baseline(void)
+static void cooling_boost_and_idle(void)
 {
-    HeatEstimate estimate = {0};
+    HeatEstimate estimate = heat_estimate_begin(
+        30, RMUL2027_17MM_HEAT_PER_EVENT, RMUL2027_HEAT_COOLING_PERIOD_MS);
+    /* 参数由使用方传入；此处分别验证 1.5 倍增益后的实际冷却数值。 */
+    uint16_t burst_boosted = RMUL2027_INFANTRY_BURST_COOLING_PER_S * 3U / 2U;
+    uint16_t cool_boosted = RMUL2027_INFANTRY_COOL_COOLING_PER_S * 3U / 2U;
+    assert(heat_estimate_step(&estimate, 0, 100, burst_boosted));
+    expect_heat(&estimate, 27900);
+    assert(heat_estimate_step(&estimate, 0, 100, cool_boosted));
+    expect_heat(&estimate, 24300);
+    assert(heat_estimate_step(&estimate, 2, 5000, cool_boosted));
+    expect_heat(&estimate, 20000);
+    assert(heat_estimate_step(&estimate, 0, 200, 0));
+    expect_heat(&estimate, 20000);
+}
+
+static void one_ms_calls_and_reset(void)
+{
+    HeatEstimate split = heat_estimate_begin(
+        30, RMUL2027_17MM_HEAT_PER_EVENT, RMUL2027_HEAT_COOLING_PERIOD_MS);
+    HeatEstimate single = split;
+    assert(heat_estimate_step(&single, 0, 1000, RMUL2027_INFANTRY_BURST_COOLING_PER_S));
+    for (unsigned tick = 0; tick < 1000; ++tick) {
+        assert(heat_estimate_step(&split, 0, 1, RMUL2027_INFANTRY_BURST_COOLING_PER_S));
+    }
+    expect_heat(&single, 16000);
+    expect_heat(&split, 16000);
+    split = heat_estimate_begin(
+        0, RMUL2027_17MM_HEAT_PER_EVENT, RMUL2027_HEAT_COOLING_PERIOD_MS);
+    expect_heat(&split, 0);
+    assert(split.cooling_elapsed_ms == 0);
+}
+
+static void invalid_state_and_numeric_limits(void)
+{
     uint64_t untouched = 123;
-    assert(!heat_estimate_read(&estimate, 0, &untouched));
+    HeatEstimate estimate = {0};
+    assert(!heat_estimate_read(&estimate, &untouched));
+    assert(!heat_estimate_step(&estimate, 1, 1, 1));
     assert(untouched == 123);
-    estimate = heat_estimate_begin(0, 12, 50, 4, 2);
-    assert(!heat_estimate_observe(&estimate, 14, 100, 2));
-    assert(!heat_estimate_read(&estimate, 100, &untouched));
-    assert(!heat_estimate_observe(&estimate, 13, 110, 2));
-    estimate = heat_estimate_begin(0, 0, 500, 4, 2);
-    assert(heat_estimate_observe(&estimate, 1, 501, 2));
-    assert(!heat_estimate_observe(&estimate, 2, 500, 2));
-    assert(!heat_estimate_read(&estimate, 505, &untouched));
-    estimate = heat_estimate_begin(2, 0, 0, 4, UINT16_MAX);
-    expect_heat(&estimate, INT32_MAX, 0);
-    assert(!heat_estimate_read(&estimate, (uint32_t)INT32_MAX + 1, &untouched));
+    estimate = heat_estimate_begin(0, 0, RMUL2027_HEAT_COOLING_PERIOD_MS);
+    assert(!heat_estimate_step(&estimate, 1, 1, 1));
+    estimate = heat_estimate_begin(0, RMUL2027_17MM_HEAT_PER_EVENT, 0);
+    assert(!heat_estimate_step(&estimate, 1, 1, 1));
+    estimate = heat_estimate_begin(
+        0, RMUL2027_17MM_HEAT_PER_EVENT, RMUL2027_HEAT_COOLING_PERIOD_MS);
+    assert(heat_estimate_step(&estimate, UINT32_MAX, 99, 0));
+    expect_heat(&estimate, (uint64_t)UINT32_MAX * RMUL2027_17MM_HEAT_PER_EVENT * 1000);
+    assert(heat_estimate_step(&estimate, 0, UINT32_MAX, UINT16_MAX));
+    assert(estimate.cooling_elapsed_ms == ((uint64_t)99 + UINT32_MAX) % 100);
+    estimate.milliheat = UINT64_MAX;
+    assert(!heat_estimate_step(&estimate, 1, 0, 0));
+    assert(!heat_estimate_read(&estimate, &untouched));
     assert(untouched == 123);
 }
 
 int main(void)
 {
-    confirmed_events_and_late_report();
-    cooling_and_wrap();
-    invalid_history_and_new_baseline();
+    burst_cooling_boundary();
+    cool_profile_and_batch_count();
+    cooling_boost_and_idle();
+    one_ms_calls_and_reset();
+    invalid_state_and_numeric_limits();
     return 0;
 }
