@@ -1,9 +1,41 @@
 #include "heat_monitor.h"
 #include "heat_rules_2027.h"
 #include <assert.h>
+#include <stddef.h>
+
+static void independent_report_status(void)
+{
+    HeatReading limit = {88, 100, true};
+    HeatReading referee = {87, 100, true};
+    uint64_t estimate = 88001;
+    HeatReport report = heat_monitor_report(&estimate, referee, limit, 110, 10, 20);
+    assert(report.estimated_status == HEAT_ABOVE_LIMIT);
+    assert(report.referee_status == HEAT_BELOW_LIMIT);
+    estimate = 88000;
+    report = heat_monitor_report(&estimate, referee, limit, 111, 10, 20);
+    assert(report.estimated_status == HEAT_AT_LIMIT);
+    assert(report.referee_status == HEAT_DATA_STALE);
+    report = heat_monitor_report(NULL, referee, limit, 110, 10, 20);
+    assert(report.estimated_status == HEAT_DATA_MISSING);
+    assert(report.referee_status == HEAT_BELOW_LIMIT);
+    estimate = 0;
+    referee.received = false;
+    report = heat_monitor_report(&estimate, referee, limit, 110, 10, 20);
+    assert(report.estimated_status == HEAT_BELOW_LIMIT);
+    assert(report.referee_status == HEAT_DATA_MISSING);
+    referee.received = true;
+    report = heat_monitor_report(&estimate, referee, limit, 121, 30, 20);
+    assert(report.estimated_status == HEAT_DATA_STALE);
+    assert(report.referee_status == HEAT_DATA_STALE);
+    limit.received = false;
+    report = heat_monitor_report(&estimate, referee, limit, 110, 10, 20);
+    assert(report.estimated_status == HEAT_DATA_MISSING);
+    assert(report.referee_status == HEAT_DATA_MISSING);
+}
 
 int main(void)
 {
+    independent_report_status();
     HeatReading heat = {99, 100, true};
     HeatReading limit = {100, 90, true};
     assert(heat_monitor_compare(heat, limit, 110, 10, 20) == HEAT_BELOW_LIMIT);

@@ -19,9 +19,20 @@ typedef enum {
     HEAT_ABOVE_LIMIT
 } HeatStatus;
 
+typedef struct {
+    HeatStatus estimated_status;
+    HeatStatus referee_status;
+} HeatReport;
+
 /* 用于显示和日志。两项读数可以来自不同报文，各自携带接收时间。 */
 HeatStatus heat_monitor_compare(HeatReading heat, HeatReading limit,
                                 uint32_t now_ms, uint32_t heat_max_age_ms,
                                 uint32_t limit_max_age_ms);
+
+/* 日志/显示用。估值单位为千分之一热量；传空指针表示无有效估值。 */
+HeatReport heat_monitor_report(const uint64_t *estimate_milliheat,
+                               HeatReading referee, HeatReading limit,
+                               uint32_t now_ms, uint32_t referee_max_age_ms,
+                               uint32_t limit_max_age_ms);
 
 #endif
