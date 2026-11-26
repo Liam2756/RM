@@ -97,7 +97,7 @@ gcc -std=c99 -Wall -Wextra -Werror -I. heat_estimate.c tests/test_heat_estimate.
 
 复现时，在本目录执行 `gcc -std=c99 -O2 -Wall -Wextra -Werror -I. heat_estimate.c tests/replay_heat_phase.c -o heat_phase`，再运行生成的程序。每行依次输出场景名、最大高估和低估（千分之一热量）、是否误报和漏报（1 表示出现）。
 
-## 双板工程只读核查与接入目标
+## 双板工程接入进度
 
 目标目录为 `D:\AI_project\RM\GBU_2027_infantry_double_borad`。本次在目录外制作当前受跟踪文件快照，推送至个人仓库 `Liam2756/GBU_2027_infantry_double_borad` 的 `main` 分支，提交 `cca8158fd13b91ff3ad91016754b9e006595f891`。上传后核对 452 个受跟踪文件及原目录 Git 暂存索引，均与上传前一致。快照保留工程现状，构建验证由既有工程记录说明。
 
@@ -105,9 +105,11 @@ gcc -std=c99 -Wall -Wextra -Werror -I. heat_estimate.c tests/test_heat_estimate.
 
 - `gimbal_borad/User/application/system_app.c` 的 TIM1 回调进入 `User_System_Tick1ms`，其中调用 `Shooter_Tick1ms`。
 - 预期算法文件归属为 `gimbal_borad/User/algorithm`。云台板 CMake 已递归收集 `User/*.c` 并添加算法目录的头文件路径。
-- `gimbal_borad/User/control/shooter.c` 持有发射状态和电机输出，当前没有调用热量模块。源码中尚未找到已实现的枪管开关计数采集和裁判热量解码入口。PB12 的输入配置本身无法证明它连接枪管开关。
+- `gimbal_borad/User/control/shooter.c` 持有发射状态和电机输出。2026-11-26 按用户要求将算法安装到云台板算法层，并在 `system_app.c` 的定时调用链中加入应用层热量观测。真实枪管计数与裁判热量解码的调用方待接入。
 
-目标工程目录按用户要求只读。本次算法和开发文档均维护在 `heat_control`，实车接线、计数来源、冷却参数来源和后续允许修改的接入目录仍需明确。当前进展为完成周期估算器及热量状态判断，真正的实物发射控制尚未完成。
+用户于 2026-11-26 明确要求写入目标工程并配置 SerialPlot。目标工程本地提交为 `f22a313`，个人仓库 `Liam2756/GBU_2027_infantry_double_borad` 的 `main` 发布提交为 `bff2f9439696188fe6066bc0fb11fe5a813075f5`。云台为 16 通道，追加热量在 8–15，数据区 64 字节。应用层观测采用冷却优先本地配置，未知起点和缺失读数显示无数据。开关引脚、有效电平和实际已知热量起点仍需确认，才能观察真实出弹热量曲线。
+
+两板完整构建、云台及公共主机回归通过。底盘现有测试在第 158 行失败，任务前快照中同样失败。战队对应工程已同步独立算法及观测接口，本地提交 `3dc3a53`，沿用其原有 24 通道并追加至 32 通道。两处固件的通道设置和输入交付方式分别维护于各工程主文档。
 
 ## 后续共用
 
